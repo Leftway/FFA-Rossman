@@ -11,7 +11,7 @@ output:
 ```{r libraries, include = FALSE}
 # Install & load relevant libraries
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(dplyr, ggplot2, readr, lubridate, pryr)
+pacman::p_load(dplyr, ggplot2, readr, lubridate, pryr, plotly,lubridate)
 ```
 
 # Importing and cleaning data
@@ -109,18 +109,14 @@ test <- test[,-4]
 ```
 
 ## 4. Skewedness of data
-library(tidyverse)
-library(plotly)
-library(lubridate)
-
+```{r, eval = TRUE}
 #group revenues by quarter
 train <- train %>%
           mutate(quarters = paste0(substr(Date,1,4),quarters(as.Date(Date))))
 
 train <- train %>% 
           group_by(quarters) %>%
-          mutate(revtq = rowSums(Sales,na.rm = TRUE) %>%
+          mutate(revtq = rowSums(Sales,na.rm = TRUE)) %>%
           ungroup()
-          
-## REMOVED
+```
           
