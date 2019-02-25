@@ -14,7 +14,7 @@ if (!require("pacman")) install.packages("pacman")
 pacman::p_load(dplyr, ggplot2, readr, lubridate, pryr)
 ```
 
-# Data Cleaning
+# Importing and cleaning data
 ## 1. Importing files 
 Import files from train, store, and test.
 ``` {r read, eval = TRUE}
@@ -61,26 +61,49 @@ __Explanation__:
 ``` {r Converting data, eval = TRUE}
 #a. Train
 train <- train %>% mutate(
+  DayOfWeek                 = as.factor(DayOfWeek),
   Date                      = as.Date(Date),
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo), 
-  StateHoliday              = as.factor(StateHoliday),
+  StateHoliday              = as.factor(StateHoliday),   # Has 4 values!
   SchoolHoliday             = as.factor(SchoolHoliday))
+str(train)
 
 #b. Test
 test <- test %>% mutate(
+  DayOfWeek                 = as.factor(DayOfWeek),
   Date                      = as.Date(Date),
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo),
-  StateHoliday              = as.factor(StateHoliday),
+  StateHoliday              = as.factor(StateHoliday),   # Only 2 values! What're the state holidays?
   SchoolHoliday             = as.factor(SchoolHoliday))
+str(test)
 
 #c. Store
 store <- store %>% mutate(
-  StoreType                = as.factor(StoreType),
-  Assortment               = as.factor(Assortment),
-  Promo2                   = as.factor(Promo2))
+  StoreType                 = as.factor(StoreType),
+  Assortment                = as.factor(Assortment),
+  Promo2                    = as.factor(Promo2))
+str(store)
+
+```
 
 
+# Exploratory Data Analysis
+## 1. Dates
+Sales data start from `r min(train$Date)` to `r max(train$Date)`, which spans a total of `r max(train$Date) - min(train$Date)` days or 2 years 7 months.
 
+Extract individual date components and remove date column.
+```{r, eval = TRUE }
+# Training
+train$day <- as.integer(format(train$Date, "%d"))
+train$month <- as.integer(format(train$Date, "%m"))
+train$year <- as.integer(format(train$Date, "%Y"))
+train <- train[,-3]
+
+# Test
+test$day <- as.integer(format(test$Date, "%d"))
+test$month <- as.integer(format(test$Date, "%m"))
+test$year <- as.integer(format(test$Date, "%Y"))
+test <- test[,-4]
 ```
