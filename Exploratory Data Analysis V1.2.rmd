@@ -9,15 +9,25 @@ output:
     self_contained: yes
 ---
 ```{r libraries, include = FALSE}
-# Install & load relevant libraries
+# Install & load relevant libraries. 
 if (!require("pacman")) install.packages("pacman")
-pacman::p_load(dplyr, ggplot2, readr, lubridate, pryr, plotly,lubridate)
+pacman::p_load(tidyverse, 
+               ggplot2,
+               lubridate, 
+               plotly,
+               kableExtra,
+               Knitr)
+
+# Create html_df for later stlying
+html_df <- function(x){
+  kable(x) %>%
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
+}
 ```
 
 # Importing and cleaning data
-## 1. Importing files 
-Import files from train, store, and test.
-``` {r read, eval = TRUE}
+## 1. Import files
+``` {r Import, eval = TRUE}
 # a. Import train.csv
 train <- read.csv("train.csv", stringsAsFactors = F)
 
@@ -28,24 +38,36 @@ test <- read.csv("test.csv", stringsAsFactors = F)
 store <- read.csv("store.csv", stringsAsFactors = F)
 
 ```
+## 2. Data Structure
++ Train has `r dim(train)[1]` rows and `r dim(train)[2]` columns.
++ Test has `r dim(test)[1]` rows and `r dim(test)[2]` columns.
++ Store has `r dim(store)[1]`rows and `r dim(store)[2]` columns.
 
-
-## 2. Check for NA values
-```{r NA values, eval = TRUE}
-# a. Train 
-colSums(is.na(train)) 
-
-# b. Test 
-colSums(is.na(test))
-
-# c. Store
-colSums(is.na(store)) 
+```{r Data structure, eval = TRUE}
+# Structure - Unsure if we've to put this
+# str(train)
+# str(test)
+# str(store)
 ```
 
-## 3. Imputing missing values for test
+
+## 3. Check for NA values
+```{r NA values, eval = TRUE}
+# a. Train 
+train %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
+
+# b. Test 
+test %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>% row_spec(5, bold = T, color = "red")
+
+# c. Store
+store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
+
+```
+
+## 4. Imputing missing values for test
 ``` {r Impute, eval = TRUE}
 # a. Retrieve records with Open = NA
-test %>% filter(is.na(Open))
+test %>% filter(is.na(Open)) %>% html_df()
 
 # b. Replace NA with Open = 1
 test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
@@ -53,8 +75,12 @@ test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
 # c. Check if NA has been replaced:
 sum(is.na(test$Open))
 ```
-__Explanation__:
-+ If we assume
+_Explanation_:
+
+It is more prudent to assume store 622 is open (1) on those days than to assume it is not (0). 
+
+This is because if the store is actually open (1) but sales is predicted as 0, this wrong prediction will reduce the overall prediction's accuracy. Conversely, if the store is actually not open (0) but sales
+
 
 
 ## 3. Convert data types
@@ -93,7 +119,7 @@ str(store)
 ## 1. Dates
 Sales data start from `r min(train$Date)` to `r max(train$Date)`, which spans a total of `r max(train$Date) - min(train$Date)` days or 2 years 7 months.
 
-Extract individual date components and remove date column.
+Extract individual date components 
 ```{r, eval = TRUE }
 # Training
 train$day <- as.integer(format(train$Date, "%d"))
@@ -106,7 +132,7 @@ test$month <- as.integer(format(test$Date, "%m"))
 test$year <- as.integer(format(test$Date, "%Y"))
 ```
 
-## 4. Skewedness of data
+## 2. Skewedness of data
 ```{r, eval = TRUE}
 #group revenues by quarter
 train <- train %>%
@@ -114,9 +140,9 @@ train <- train %>%
 
 train <- train %>% 
           group_by(quarters) %>%
-          mutate(revtq = rowSums(Sales,na.rm = TRUE)) %>%
+          mutate(revtq = sum(Sales,na.rm = TRUE)) %>%
           ungroup()
 ```
 
-Test
+
           
