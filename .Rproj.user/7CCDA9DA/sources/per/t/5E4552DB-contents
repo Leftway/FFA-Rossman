@@ -1,0 +1,86 @@
+---
+title: "Rossman Store Sales "
+subtitle: "Group 1 - Exploratory Data Analysis"
+author: '1. Kang Jun Han Brandon, 2.Kenny Sim Jun Hong, 3. Lim Yong Chuan,  4. Tan Soon Wei,  5. Teo Xiangquan Martin'
+date: "`r Sys.Date()`"
+output:
+  tufte::tufte_html: 
+    tufte_variant: "default"
+    self_contained: yes
+---
+```{r libraries, include = FALSE}
+# Install & load relevant libraries
+if (!require("pacman")) install.packages("pacman")
+pacman::p_load(dplyr, ggplot2, readr, lubridate, pryr)
+```
+
+# Data Cleaning
+## 1. Importing files 
+Import files from train, store, and test.
+``` {r read, eval = TRUE}
+# a. Import train.csv
+train <- read.csv("train.csv", stringsAsFactors = F)
+
+# b. Import test.csv
+test <- read.csv("test.csv", stringsAsFactors = F)
+
+# c.  Import store.csv
+store <- read.csv("store.csv", stringsAsFactors = F)
+
+```
+
+
+## 2. Check for NA values
+```{r NA values, eval = TRUE}
+# a. Train 
+colSums(is.na(train)) 
+
+# b. Test 
+colSums(is.na(test))
+
+# c. Store
+colSums(is.na(store)) 
+```
+
+## 3. Imputing missing values for test
+``` {r Impute, eval = TRUE}
+# a. Retrieve records with Open = NA
+test %>% filter(is.na(Open))
+
+# b. Replace NA with Open = 1
+test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
+
+# c. Check if NA has been replaced:
+sum(is.na(test$Open))
+```
+__Explanation__:
++ If we assume
+
+
+## 3. Convert data types
+``` {r Converting data, eval = TRUE}
+#a. Train
+train <- train %>% mutate(
+  Date                      = as.Date(Date),
+  Open                      = as.factor(Open),
+  Promo                     = as.factor(Promo), 
+  StateHoliday              = as.factor(StateHoliday),
+  SchoolHoliday             = as.factor(SchoolHoliday))
+
+#b. Test
+test <- test %>% mutate(
+  Date                      = as.Date(Date),
+  Open                      = as.factor(Open),
+  Promo                     = as.factor(Promo),
+  StateHoliday              = as.factor(StateHoliday),
+  SchoolHoliday             = as.factor(SchoolHoliday))
+
+#c. Store
+store <- store %>% mutate(
+  StoreType                = as.factor(StoreType),
+  Assortment               = as.factor(Assortment),
+  Promo2                   = as.factor(Promo2))
+
+
+
+```

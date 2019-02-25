@@ -1,0 +1,6 @@
+"0","# a. Import train.csv"
+"0","train <- read.csv(""train.csv"", stringsAsFactors = F)"
+"0","# b. Import test.csv"
+"0","test <- read.csv(""test.csv"", stringsAsFactors = F)"
+"0","# c.  Import store.csv"
+"0","store <- read.csv(""store.csv"", stringsAsFactors = F)"
