@@ -107,3 +107,18 @@ test$month <- as.integer(format(test$Date, "%m"))
 test$year <- as.integer(format(test$Date, "%Y"))
 test <- test[,-4]
 ```
+
+## 4. Skewedness of data
+library(tidyverse)
+library(plotly)
+library(lubridate)
+
+#group revenues by quarter
+train <- train %>%
+          mutate(quarters = paste0(substr(Date,1,4),quarters(as.Date(Date))))
+
+train <- train %>% 
+          group_by(quarters) %>%
+          mutate(revtq = rowSums(Sales,na.rm = TRUE) %>%
+          ungroup()
+          
