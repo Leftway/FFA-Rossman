@@ -1,2 +1,0 @@
-"0","# a. Retrieve records with Open = NA"
-"0","test %>% filter(is.na(Open))"
