@@ -99,13 +99,11 @@ Extract individual date components and remove date column.
 train$day <- as.integer(format(train$Date, "%d"))
 train$month <- as.integer(format(train$Date, "%m"))
 train$year <- as.integer(format(train$Date, "%Y"))
-train <- train[,-3]
 
 # Test
 test$day <- as.integer(format(test$Date, "%d"))
 test$month <- as.integer(format(test$Date, "%m"))
 test$year <- as.integer(format(test$Date, "%Y"))
-test <- test[,-4]
 ```
 
 ## 4. Skewedness of data
