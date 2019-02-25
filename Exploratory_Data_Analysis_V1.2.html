@@ -58,30 +58,68 @@ if (window.hljs) {
 <h1>Importing and cleaning data</h1>
 <div id="import-files" class="section level2">
 <h2>1. Import files</h2>
-<pre class="r"><code># a. Import train.csv
+<pre class="r"><code># Import train.csv, test.csv and store.csv
 train &lt;- read.csv(&quot;train.csv&quot;, stringsAsFactors = F)
-
-# b. Import test.csv
 test &lt;- read.csv(&quot;test.csv&quot;, stringsAsFactors = F)
-
-# c.  Import store.csv
 store &lt;- read.csv(&quot;store.csv&quot;, stringsAsFactors = F)</code></pre>
 </div>
 <div id="data-structure" class="section level2">
 <h2>2. Data Structure</h2>
-<ul>
-<li>Train has 1017209 rows and 9 columns.</li>
-<li>Test has 41088 rows and 8 columns.</li>
-<li>Store has 1115rows and 10 columns.</li>
-</ul>
-<pre class="r"><code># Structure - Unsure if we've to put this
-# str(train)
-# str(test)
-# str(store)</code></pre>
+<pre class="r"><code># Rows and columns of each file
+  matrix(c(&quot;1017209&quot;, &quot;9&quot;, &quot;41088&quot;, &quot;8&quot;, &quot;1115&quot;, &quot;10&quot;),ncol=2, byrow= TRUE)                                             %&gt;% as.data.frame() %&gt;% `row.names&lt;-`(c(&quot;Train&quot;, &quot;Test&quot;, &quot;Store&quot;))                                                %&gt;% `colnames&lt;-`(c(&quot;No. of Rows&quot;, &quot;No. of Columns&quot;)) %&gt;% html_df</code></pre>
+<table class="table table-striped" style="width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:left;">
+</th>
+<th style="text-align:left;">
+No. of Rows
+</th>
+<th style="text-align:left;">
+No. of Columns
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+Train
+</td>
+<td style="text-align:left;">
+1017209
+</td>
+<td style="text-align:left;">
+9
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Test
+</td>
+<td style="text-align:left;">
+41088
+</td>
+<td style="text-align:left;">
+8
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Store
+</td>
+<td style="text-align:left;">
+1115
+</td>
+<td style="text-align:left;">
+10
+</td>
+</tr>
+</tbody>
+</table>
 </div>
-<div id="check-for-na-values" class="section level2">
-<h2>3. Check for NA values</h2>
-<pre class="r"><code># a. Train 
+<div id="check-for-na" class="section level2">
+<h2>3. Check for NA</h2>
+<pre class="r"><code># Train 
 train %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df</code></pre>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
@@ -168,7 +206,7 @@ SchoolHoliday
 </tr>
 </tbody>
 </table>
-<pre class="r"><code># b. Test 
+<pre class="r"><code># Test 
 test %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df %&gt;% row_spec(5, bold = T, color = &quot;red&quot;)</code></pre>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
@@ -247,7 +285,14 @@ SchoolHoliday
 </tr>
 </tbody>
 </table>
-<pre class="r"><code># c. Store
+<p><em>Observations</em>:</p>
+<ul>
+<li>Variable ‘Open’ should have only two possible values (Open = 1 or Closed = 0), so the 11 NA’s should be changed to either 1 or 0.</li>
+<li>If Open is = 1, but we assume = 0, the error score will increase because of misprediction.</li>
+<li>If Open is = 0, but we assume = 1, then there’s no penalty in scoring as closed stores with 0 sales are not considered in scoring.</li>
+</ul>
+<p>Hence, we will impute 1 into the NA values for the ‘Open’ variable in</p>
+<pre class="r"><code># Store
 store %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df</code></pre>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
