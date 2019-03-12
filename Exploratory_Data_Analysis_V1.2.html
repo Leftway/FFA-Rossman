@@ -11,7 +11,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 
 
-<meta name="date" content="2019-02-25" />
+<meta name="date" content="2019-03-12" />
 
 <title>Rossman Store Sales</title>
 
@@ -50,7 +50,7 @@ if (window.hljs) {
 <h4 class="author"><em><ol style="list-style-type: decimal">
 <li>Kang Jun Han Brandon, 2.Kenny Sim Jun Hong, 3. Lim Yong Chuan, 4. Tan Soon Wei, 5. Teo Xiangquan Martin</li>
 </ol></em></h4>
-<h4 class="date"><em>2019-02-25</em></h4>
+<h4 class="date"><em>2019-03-12</em></h4>
 
 
 
@@ -65,8 +65,6 @@ store &lt;- read.csv(&quot;store.csv&quot;, stringsAsFactors = F)</code></pre>
 </div>
 <div id="data-structure" class="section level2">
 <h2>2. Data Structure</h2>
-<pre class="r"><code># Rows and columns of each file
-  matrix(c(&quot;1017209&quot;, &quot;9&quot;, &quot;41088&quot;, &quot;8&quot;, &quot;1115&quot;, &quot;10&quot;),ncol=2, byrow= TRUE)                                             %&gt;% as.data.frame() %&gt;% `row.names&lt;-`(c(&quot;Train&quot;, &quot;Test&quot;, &quot;Store&quot;))                                                %&gt;% `colnames&lt;-`(c(&quot;No. of Rows&quot;, &quot;No. of Columns&quot;)) %&gt;% html_df</code></pre>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
 <tr>
@@ -119,8 +117,8 @@ Store
 </div>
 <div id="check-for-na" class="section level2">
 <h2>3. Check for NA</h2>
-<pre class="r"><code># Train 
-train %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df</code></pre>
+<div id="na-values-for-train" class="section level3">
+<h3>NA values for train</h3>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
 <tr>
@@ -206,8 +204,9 @@ SchoolHoliday
 </tr>
 </tbody>
 </table>
-<pre class="r"><code># Test 
-test %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df %&gt;% row_spec(5, bold = T, color = &quot;red&quot;)</code></pre>
+</div>
+<div id="na-values-for-test" class="section level3">
+<h3>NA values for test</h3>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
 <tr>
@@ -291,9 +290,10 @@ SchoolHoliday
 <li>If Open is = 1, but we assume = 0, the error score will increase because of misprediction.</li>
 <li>If Open is = 0, but we assume = 1, then there’s no penalty in scoring as closed stores with 0 sales are not considered in scoring.</li>
 </ul>
-<p>Hence, we will impute 1 into the NA values for the ‘Open’ variable in</p>
-<pre class="r"><code># Store
-store %&gt;% is.na() %&gt;% colSums() %&gt;% data.frame() %&gt;% `colnames&lt;-`(&quot;No. of NAs&quot;) %&gt;% html_df</code></pre>
+<p>Hence, we will impute 1 into the NA values for the ‘Open’ variable in the test dataset.</p>
+</div>
+<div id="na-values-for-store" class="section level3">
+<h3>NA values for store</h3>
 <table class="table table-striped" style="width: auto !important; ">
 <thead>
 <tr>
@@ -387,6 +387,7 @@ PromoInterval
 </tr>
 </tbody>
 </table>
+</div>
 </div>
 <div id="imputing-missing-values-for-test" class="section level2">
 <h2>4. Imputing missing values for test</h2>

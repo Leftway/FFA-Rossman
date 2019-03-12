@@ -1,8 +1,0 @@
-"0","# b. Replace NA with Open = 1"
-"0","test <- test %>% mutate(Open = replace(Open, is.na(Open),1))"
-"0","# c. Check if NA has been replaced:"
-"0","sum(is.na(test$Open))"
-"1","[1]"
-"1"," 0"
-"1","
-"

@@ -8,7 +8,7 @@ output:
     tufte_variant: "default"
     self_contained: yes
 ---
-```{r libraries, include = FALSE}
+```{r libraries, include = F}
 # Install & load relevant libraries. 
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(tidyverse, 
@@ -27,7 +27,7 @@ html_df <- function(x){
 
 # Importing and cleaning data
 ## 1. Import files
-``` {r Import, eval = TRUE}
+``` {r Import, eval = T}
 # Import train.csv, test.csv and store.csv
 train <- read.csv("train.csv", stringsAsFactors = F)
 test <- read.csv("test.csv", stringsAsFactors = F)
@@ -35,7 +35,7 @@ store <- read.csv("store.csv", stringsAsFactors = F)
 ```
 
 ## 2. Data Structure
-```{r Dimensions Check, include = FALSE}
+```{r Dimensions Check, include = F}
  str(train)
  str(test)
  str(store)
@@ -44,19 +44,25 @@ store <- read.csv("store.csv", stringsAsFactors = F)
  dim(store)
 ```
  
-```{r Data Structure, eval = TRUE}
+```{r Data Structure, eval = T, echo= F }
 # Rows and columns of each file
-  matrix(c("1017209", "9", "41088", "8", "1115", "10"),ncol=2, byrow= TRUE)                                             %>% as.data.frame() %>% `row.names<-`(c("Train", "Test", "Store"))                                                %>% `colnames<-`(c("No. of Rows", "No. of Columns")) %>% html_df
+matrix(c("1017209", "9", "41088", "8", "1115", "10"),ncol=2, byrow= TRUE)%>% as.data.frame() %>% `row.names<-`(c("Train", "Test", "Store")) %>% `colnames<-`(c("No. of Rows", "No. of Columns")) %>% html_df
 ```
 
 ## 3. Check for NA 
-```{r NA values train, eval = TRUE}
+### NA values for train ###   
+```{r NA values - train, eval = T, echo = F}
 # Train 
 train %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
+```
 
+
+### NA values for test ###   
+``` {r NA values - test, eval = T, echo = F}
 # Test 
 test %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>% row_spec(5, bold = T, color = "red")
 ```
+
 
 _Observations_:
 
@@ -64,9 +70,10 @@ _Observations_:
 + If Open is = 1, but we assume = 0, the error score will increase because of misprediction.
 + If Open is = 0, but we assume = 1, then there's no penalty in scoring as closed stores with 0 sales are not considered in scoring. 
 
-Hence, we will impute 1 into the NA values for the 'Open' variable in
+Hence, we will impute 1 into the NA values for the 'Open' variable in the test dataset. 
 
-```{r NA values - Store, eval = TRUE }
+### NA values for store ###   
+```{r NA values - Store, eval = T, echo = F}
 # Store
 store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
 ```
@@ -74,7 +81,7 @@ store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") 
 
 
 ## 4. Imputing missing values for test
-``` {r Impute, eval = TRUE}
+``` {r Impute, eval = T}
 # a. Retrieve records with Open = NA
 test %>% filter(is.na(Open)) %>% html_df()
 
@@ -84,16 +91,14 @@ test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
 # c. Check if NA has been replaced:
 sum(is.na(test$Open))
 ```
-_Explanation_:
-
-It is more prudent to assume store 622 is open (1) on those days than to assume it is not (0). 
-
-This is because if the store is actually open (1) but sales is predicted as 0, this wrong prediction will reduce the overall prediction's accuracy. Conversely, if the store is actually not open (0) but sales
 
 
 
-## 3. Convert data types
-``` {r Converting data, eval = TRUE}
+## 5. Convert data types
+
++ Insert explanation for the type conversion here
+
+``` {r Converting data, eval = T}
 #a. Train
 train <- train %>% mutate(
   DayOfWeek                 = as.factor(DayOfWeek),
@@ -101,7 +106,10 @@ train <- train %>% mutate(
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo), 
   StateHoliday              = as.factor(StateHoliday),   # Has 4 values!
-  SchoolHoliday             = as.factor(SchoolHoliday))
+  SchoolHoliday             = as.factor(SchoolHoliday),
+  Day                       = as.integer(format(train$Date, "%d")), # New variable 1
+  Month                     = as.integer(format(train$Date, "%m")), # New variable 2
+  Year                      = as.integer(format(train$Date, "%Y"))) # New variable 3
 str(train)
 
 #b. Test
@@ -111,7 +119,10 @@ test <- test %>% mutate(
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo),
   StateHoliday              = as.factor(StateHoliday),   # Only 2 values! What're the state holidays?
-  SchoolHoliday             = as.factor(SchoolHoliday))
+  SchoolHoliday             = as.factor(SchoolHoliday),
+  Day                       = as.integer(format(test$Date, "%d")),  # New variable 1
+  Month                     = as.integer(format(test$Date, "%m")),  # New variable 2
+  Year                      = as.integer(format(test$Date, "%Y")))  # New variable 3
 str(test)
 
 #c. Store
@@ -128,21 +139,23 @@ str(store)
 ## 1. Dates
 Sales data start from `r min(train$Date)` to `r max(train$Date)`, which spans a total of `r max(train$Date) - min(train$Date)` days or 2 years 7 months.
 
-Extract individual date components 
-```{r, eval = TRUE }
-# Training
-train$day <- as.integer(format(train$Date, "%d"))
-train$month <- as.integer(format(train$Date, "%m"))
-train$year <- as.integer(format(train$Date, "%Y"))
+## 2. Sales - By day of week (Dependent Variable)
 
-# Test
-test$day <- as.integer(format(test$Date, "%d"))
-test$month <- as.integer(format(test$Date, "%m"))
-test$year <- as.integer(format(test$Date, "%Y"))
+__Observations__:
+Why are Sunday's sales so low? To check further
+```{r Sales - DayofWeek, eval = T }
+ggplot(data = train, aes (x= DayOfWeek, y= Sales)) +
+geom_bar(stat = "identity")
+
+count <- train %>%   count(DayOfWeek, sort = T)
+count
+unique(train$DayOfWeek)
+
 ```
+## 3
 
-## 2. Skewedness of data
-```{r, eval = TRUE}
+## Reserved . Skewedness of data
+```{r, eval = T}
 #group revenues by quarter
 train <- train %>%
           mutate(quarters = paste0(substr(Date,1,4),quarters(as.Date(Date))))
