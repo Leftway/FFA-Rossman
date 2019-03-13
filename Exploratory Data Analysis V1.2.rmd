@@ -1,12 +1,9 @@
 ---
 title: "Rossman Store Sales "
 subtitle: "Group 1 - Exploratory Data Analysis"
-author: '1. Kang Jun Han Brandon, 2.Kenny Sim Jun Hong, 3. Lim Yong Chuan,  4. Tan Soon Wei,  5. Teo Xiangquan Martin'
+author: '1. Kang Jun Han Brandon,  2.Kenny Sim Jun Hong, 3. Lim Yong Chuan,  4. Tan Soon Wei,  5. Teo Xiangquan Martin'
 date: "`r Sys.Date()`"
-output:
-  tufte::tufte_html: 
-    tufte_variant: "default"
-    self_contained: yes
+output: html_document
 ---
 ```{r libraries, include = F}
 # Install & load relevant libraries. 
@@ -16,8 +13,11 @@ pacman::p_load(tidyverse,
                lubridate, 
                plotly,
                kableExtra,
-               Knitr)
-
+               zoo,
+               plotly,
+               Scale,
+               forecast)
+              
 # Create html_df for later stlying
 html_df <- function(x){
   kable(x) %>%
@@ -78,8 +78,6 @@ Hence, we will impute 1 into the NA values for the 'Open' variable in the test d
 store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
 ```
 
-
-
 ## 4. Imputing missing values for test
 ``` {r Impute, eval = T}
 # a. Retrieve records with Open = NA
@@ -91,7 +89,6 @@ test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
 # c. Check if NA has been replaced:
 sum(is.na(test$Open))
 ```
-
 
 
 ## 5. Convert data types
@@ -106,10 +103,10 @@ train <- train %>% mutate(
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo), 
   StateHoliday              = as.factor(StateHoliday),   # Has 4 values!
-  SchoolHoliday             = as.factor(SchoolHoliday),
-  Day                       = as.integer(format(train$Date, "%d")), # New variable 1
-  Month                     = as.integer(format(train$Date, "%m")), # New variable 2
-  Year                      = as.integer(format(train$Date, "%Y"))) # New variable 3
+  SchoolHoliday             = as.factor(SchoolHoliday))
+  #Day                       = as.integer(format(train$Date, "%d")), # New variable 1
+  #Month                     = as.integer(format(train$Date, "%m")), # New variable 2
+  #Year                      = as.integer(format(train$Date, "%Y"))) # New variable 3
 str(train)
 
 #b. Test
@@ -119,51 +116,173 @@ test <- test %>% mutate(
   Open                      = as.factor(Open),
   Promo                     = as.factor(Promo),
   StateHoliday              = as.factor(StateHoliday),   # Only 2 values! What're the state holidays?
-  SchoolHoliday             = as.factor(SchoolHoliday),
-  Day                       = as.integer(format(test$Date, "%d")),  # New variable 1
-  Month                     = as.integer(format(test$Date, "%m")),  # New variable 2
-  Year                      = as.integer(format(test$Date, "%Y")))  # New variable 3
+  SchoolHoliday             = as.factor(SchoolHoliday))
+  #Day                       = as.integer(format(test$Date, "%d")),  # New variable 1
+  #Month                     = as.integer(format(test$Date, "%m")),  # New variable 2
+  #Year                      = as.integer(format(test$Date, "%Y")))  # New variable 3
 str(test)
 
 #c. Store
 store <- store %>% mutate(
   StoreType                 = as.factor(StoreType),
   Assortment                = as.factor(Assortment),
-  Promo2                    = as.factor(Promo2))
+  Promo2                    = as.factor(Promo2),
+  PromoInterval             = as.factor(PromoInterval))
 str(store)
 
 ```
 
 
 # Exploratory Data Analysis
-## 1. Dates
+## Data Merging
+```{r Merge: Store + Training , eval = T}
+train.store <- merge(train, store, by = "Store")
+```
+
+## 1. Dates (YC)
 Sales data start from `r min(train$Date)` to `r max(train$Date)`, which spans a total of `r max(train$Date) - min(train$Date)` days or 2 years 7 months.
 
-## 2. Sales - By day of week (Dependent Variable)
+```{r Sales - Date, eval = T }
+plot(train$Date, type = "l") 
+plot(test$Date, type = "l") 
 
-__Observations__:
-Why are Sunday's sales so low? To check further
+```
+No () visible breaks in data, hence no missing data by date. 
+
+
+## 2. Day of week (YC)
+Sunday has the least sales for all opened stores over the data period, and that could be because most stores are closed on Sundays. 
 ```{r Sales - DayofWeek, eval = T }
+# Check if closed stores have any sales. Result = no anomalies.
+train.closed <- train[train$Open == 0,]
+train.closed$Sales %>% sum()  
+
+# First plot
 ggplot(data = train, aes (x= DayOfWeek, y= Sales)) +
 geom_bar(stat = "identity")
 
-count <- train %>%   count(DayOfWeek, sort = T)
-count
-unique(train$DayOfWeek)
+# Second plot
+train %>% group_by(DayOfWeek, Open) %>% tally() %>%
+  ggplot(aes(x=DayOfWeek, y=n, fill = Open)) +
+  geom_bar(stat="identity")
 
 ```
-## 3
 
-## Reserved . Skewedness of data
-```{r, eval = T}
-#group revenues by quarter
-train <- train %>%
-          mutate(quarters = paste0(substr(Date,1,4),quarters(as.Date(Date))))
+## 3. PromotionInterval, StoreType, Assortment Analysis (YC)
+```{r ProInt + Type + Assortment, eval = T}
+# PromotionInterval
+ggplot(train.store, aes(x = factor(PromoInterval), y = Sales, color = PromoInterval)) +
+    geom_col() +
+    ggtitle("Sales by PromoInterval")
 
-train <- train %>% 
-          group_by(quarters) %>%
-          mutate(revtq = sum(Sales,na.rm = TRUE)) %>%
-          ungroup()
+# StoreType
+ggplot(train.store, aes(x = Date, y = Sales, color = StoreType))+ 
+    geom_smooth(se= F, size = 1.5) +
+    ggtitle("Sales by StoreType")
+
+
+ggplot(train.store, aes(x = Date, y = Customers, color = StoreType)) + 
+    geom_smooth(se= F, size = 1.5) +
+    ggtitle("Customers by StoreType")
+
+# Assortment
+ggplot(train.store, aes(x = Date, y = Sales, color = Assortment)) + 
+    geom_smooth(se= F, size = 1.5) +
+    ggtitle("Sales by Assortment")
+
+    
+ggplot(train.store, aes(x = Date, y = Customers, color = Assortment)) + 
+    geom_smooth(se= F, size = 1.5) +
+    ggtitle("Customers by Assortment")
+```
+## 4. CompetitionDistance, OpenSinceMonth/Year
+```{r Competition, eval = T}
+# Combine year and month into one date variable:
+store$CompetitionOpenSince <-as.yearmon(paste(store$CompetitionOpenSinceYear, 
+                                               store$CompetitionOpenSinceMonth, sep = "-"))
+
+# P.S: yearmon functon creates a numeric vector interpreted in "years" and fractions of years. e.g. 1961.5 = June 1961.
+
+# Histogram for CompetitionOpenedSince
+plot_ly(x= store$CompetitionOpenSince, type = "histogram") %>%
+layout(title = "Distribution of CompetitionOpenedSince",
+         xaxis = list(title = "Year",
+                      zeroline = FALSE),
+         yaxis = list(title = "Count",
+                      zeroline = FALSE))
+```
+_Observations_: Many competitors opened recently, except 1 that opened in 1900 and 1 in 1961. 
+
+# 5. Promo2, Promo2Since Week/Year
+```{r Promo2 + Since Week/Year, eval = T}
+# Combine year and month into one date variable:
+store$Promo2Since <- as.POSIXct(paste(store$Promo2SinceYear, 
+                                   store$Promo2SinceWeek, 1, sep = "-"),
+                             format = "%Y-%U-%u")
+
+hist(as.numeric(as.POSIXct("2015-10-01", format = "%Y-%m-%d") - store$Promo2Since), 
+     100, main = "Days since start of promo2")
+
+# Histogram for Promo2Since (in days)
+plot_ly(x= as.POSIXct("2015-10-01", format = "%Y-%m-%d") - store$Promo2Since, type = "histogram") %>%
+layout(title = "Distribution of Promo2Since",
+         xaxis = list(title = "Days",
+                      zeroline = FALSE),
+         yaxis = list(title = "Count",
+                      zeroline = FALSE))
+```
+
+# 6. Competition Distance
+
+```{r Competiton Distance, eval = T}
+# MeanSales by CompetitionDistance
+salesbydist <- train.store %>% group_by(CompetitionDistance) %>% summarise(MeanSales = mean(Sales, na.rm=TRUE))
+
+## NOTE: Plotting without mean makes everthing too cluttered. Code below can't see shit. Followed online guide.
+## ggplot(train.store, aes(x = CompetitionDistance, y = Sales)) + geom_point() + geom_smooth() 
+
+# salesbydist scatterplot 
+
+ggplot(salesbydist, aes(x = CompetitionDistance, y = MeanSales)) + 
+    geom_point() + geom_smooth() + scale_x_log10() + scale_y_log10()
+
+```
+__Observations__: 
+Interestingly, stores with competition that are closer have slightly higher sales on average while those with competition that are further have slightly lower sales. Just based on this graph alone, we cannot deduce much, but a possibility is that the stores with close competitors are situated in areas with high footfall such as cities, contributing to slightly higher revenue. 
+
+```{r Merge: Store(new) + Training, eval = T}
+train.store <- merge(train, store, by = "Store")
+
+train.store2 <- train.store %>% dplyr:: select(
+  DayOfWeek, #1
+  Sales,     #2
+  Customers, #3
+  Open,      #4
+  Promo,     #5
+  StateHoliday, #6
+  SchoolHoliday, #7 
+  StoreType,   #8
+  Assortment,  #9
+  CompetitionDistance,  #10
+  Promo2,               #11
+  PromoInterval,        #12
+  CompetitionOpenSince) #13
+  #Promo2Since)          #14
+str(train.store2)
+
+```
+# Model creation
+## 1. Using step-wise regression to select best variables 
+```{r Features selection: Stepwise, eval = T }
+
+# Run lm first
+train.mlm <- lm(Sales ~.,  data = train.store2)
+str(train.store)
+
+# Ultimate step-wise regression...is useless in feature selection here...
+training.swr <- step(train.mlm, direction = "both")
+summary(training.swr) 
+
 ```
 
 
