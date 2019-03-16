@@ -16,7 +16,8 @@ pacman::p_load(tidyverse,
                zoo,
                plotly,
                Scale,
-               forecast)
+               forecast,
+               rpart)
               
 # Create html_df for later stlying
 html_df <- function(x){
@@ -135,8 +136,10 @@ str(store)
 
 # Exploratory Data Analysis
 ## Data Merging
-```{r Merge: Store + Training , eval = T}
+```{r Merging , eval = T}
 train.store <- merge(train, store, by = "Store")
+test.store <- merge(test, store, by = "Store")
+
 ```
 
 ## 1. Dates (YC)
@@ -284,6 +287,18 @@ training.swr <- step(train.mlm, direction = "both")
 summary(training.swr) 
 
 ```
+_Observation_: All variables are significant with stepwise regression. Proceed to classification trees for prediction
+
+## 2. Using decision trees to predict sales
+```{r Decision Trees, eval = T }
+
+# Decision Tree with Rpart function
+train.dt <- rpart(Sales ~ Customers + Open + Promo, data = train.store2, method = "class")
+
+Sys.info()[["machine"]]
+memory.limit()
+```
+
 
 
           
