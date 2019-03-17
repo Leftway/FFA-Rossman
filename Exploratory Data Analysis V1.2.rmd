@@ -17,17 +17,18 @@ pacman::p_load(tidyverse,
                plotly,
                Scale,
                forecast,
-               rpart)
+               rpart,
+               caret,
+               e1071)
               
 # Create html_df for later stlying
 html_df <- function(x){
   kable(x) %>%
-   kable_styling(bootstrap_options = "striped", full_width = F, position = "left")
-}
+   kable_styling(bootstrap_options = "striped", full_width = F, position = "left")}
+
 ```
 
-# Importing and cleaning data
-## 1. Import files
+# Import files
 ``` {r Import, eval = T}
 # Import train.csv, test.csv and store.csv
 train <- read.csv("train.csv", stringsAsFactors = F)
@@ -35,7 +36,8 @@ test <- read.csv("test.csv", stringsAsFactors = F)
 store <- read.csv("store.csv", stringsAsFactors = F)
 ```
 
-## 2. Data Structure
+# Data Cleaning 
+## 1. Data Structure
 ```{r Dimensions Check, include = F}
  str(train)
  str(test)
@@ -44,58 +46,14 @@ store <- read.csv("store.csv", stringsAsFactors = F)
  dim(test)
  dim(store)
 ```
- 
-```{r Data Structure, eval = T, echo= F }
+
+```{r Data Structure, eval = T, echo = F}
 # Rows and columns of each file
 matrix(c("1017209", "9", "41088", "8", "1115", "10"),ncol=2, byrow= TRUE)%>% as.data.frame() %>% `row.names<-`(c("Train", "Test", "Store")) %>% `colnames<-`(c("No. of Rows", "No. of Columns")) %>% html_df
 ```
 
-## 3. Check for NA 
-### NA values for train ###   
-```{r NA values - train, eval = T, echo = F}
-# Train 
-train %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
-```
-
-
-### NA values for test ###   
-``` {r NA values - test, eval = T, echo = F}
-# Test 
-test %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>% row_spec(5, bold = T, color = "red")
-```
-
-
-_Observations_:
-
-+ Variable 'Open' should have only two possible values (Open = 1 or Closed = 0), so the 11 NA's should be changed to either 1 or 0.
-+ If Open is = 1, but we assume = 0, the error score will increase because of misprediction.
-+ If Open is = 0, but we assume = 1, then there's no penalty in scoring as closed stores with 0 sales are not considered in scoring. 
-
-Hence, we will impute 1 into the NA values for the 'Open' variable in the test dataset. 
-
-### NA values for store ###   
-```{r NA values - Store, eval = T, echo = F}
-# Store
-store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
-```
-
-## 4. Imputing missing values for test
-``` {r Impute, eval = T}
-# a. Retrieve records with Open = NA
-test %>% filter(is.na(Open)) %>% html_df()
-
-# b. Replace NA with Open = 1
-test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
-
-# c. Check if NA has been replaced:
-sum(is.na(test$Open))
-```
-
-
-## 5. Convert data types
-
+###   1.1 Convert data types
 + Insert explanation for the type conversion here
-
 ``` {r Converting data, eval = T}
 #a. Train
 train <- train %>% mutate(
@@ -105,9 +63,7 @@ train <- train %>% mutate(
   Promo                     = as.factor(Promo), 
   StateHoliday              = as.factor(StateHoliday),   # Has 4 values!
   SchoolHoliday             = as.factor(SchoolHoliday))
-  #Day                       = as.integer(format(train$Date, "%d")), # New variable 1
-  #Month                     = as.integer(format(train$Date, "%m")), # New variable 2
-  #Year                      = as.integer(format(train$Date, "%Y"))) # New variable 3
+
 str(train)
 
 #b. Test
@@ -118,42 +74,135 @@ test <- test %>% mutate(
   Promo                     = as.factor(Promo),
   StateHoliday              = as.factor(StateHoliday),   # Only 2 values! What're the state holidays?
   SchoolHoliday             = as.factor(SchoolHoliday))
-  #Day                       = as.integer(format(test$Date, "%d")),  # New variable 1
-  #Month                     = as.integer(format(test$Date, "%m")),  # New variable 2
-  #Year                      = as.integer(format(test$Date, "%Y")))  # New variable 3
-str(test)
+ str(test)
 
 #c. Store
 store <- store %>% mutate(
   StoreType                 = as.factor(StoreType),
   Assortment                = as.factor(Assortment),
   Promo2                    = as.factor(Promo2),
-  PromoInterval             = as.factor(PromoInterval))
+  PromoInterval             = as.factor(PromoInterval),
+  CompetitionOpenSinceMonth = as.numeric(CompetitionOpenSinceMonth),
+  CompetitionOpenSinceYear  = as.numeric(CompetitionOpenSinceYear))
 str(store)
 
 ```
 
 
+## 2. Check and impute values for NA
+###   2.1 Train and Test
+
+*Train set*
+```{r NA values - train, eval = T, echo = F}
+# Train
+train %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
+```
+
+*Test set*
+```{r NA values - test, eval = T, echo = F}
+# Test 
+test %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>% row_spec(5, bold = T, color = "red")
+```
+_Observations_:
+
++ In the test set, variable 'Open' should have only two possible values (Open = 1 or Closed = 0), so the 11 NA's should be changed to either 1 or 0.
++ If Open is = 1, but we assume = 0, the error score will increase because of misprediction.
++ If Open is = 0, but we assume = 1, then there's no penalty in scoring as closed stores with 0 sales are not considered in scoring. 
+
+Hence, we will impute 1, using the replace() function, into the NA values for the 'Open' variable in the test dataset. 
+
+#### Test - Impute values for Open = NA
+``` {r NA Impute: Open, eval = T, echo = F}
+# a. Impute NA with Open = 1
+test <- test %>% mutate(Open = replace(Open, is.na(Open),1))
+
+# b. Check if NA has been replaced:
+test %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>% row_spec(5, bold = T, color = "red")
+```
+
+###   2.2 Store  
+```{r NA values - Store, eval = T, echo = F}
+# Store
+store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df
+```
+
+#### Store - Impute values for CompetitionDistance
+With mean
+```{r NA impute: CompetitionDistance, eval = T}
+# Impute NA with mean of CompetitionDistance 
+store <- store %>% 
+  mutate(CompetitionDistance= replace(CompetitionDistance, is.na(CompetitionDistance), mean(CompetitionDistance,na.rm=T)))
+          
+# Check for NAs
+store %>% filter(is.na(CompetitionDistance)) %>% nrow() 
+
+```
+
+#### Store - Impute values for CompetitionOpenSince and Promo2Since
+```{r NA impute: CompetitionOpenSince + Promo2Since, eval = T, echo = T}
+# Impute NA with median   
+store <- store %>%
+          mutate(CompetitionOpenSinceMonth=ifelse(is.na(CompetitionOpenSinceMonth),median(CompetitionOpenSinceMonth,na.rm=T), CompetitionOpenSinceMonth),
+                 CompetitionOpenSinceYear=ifelse(is.na(CompetitionOpenSinceYear),median(CompetitionOpenSinceYear,na.rm=T), CompetitionOpenSinceYear),
+                 Promo2SinceYear=ifelse(is.na(Promo2SinceYear),0, Promo2SinceYear),
+                 Promo2SinceWeek=ifelse(is.na(Promo2SinceWeek),0, Promo2SinceWeek))
+
+# Last check for NAs
+store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>%
+  row_spec(c(4,5,6,8,9), bold = T, color = "red")
+```
+
+## 3. Completeness Check - Dates 
+```{r Overall Dates Check, eval = T, echo = F }
+plot(train$Date, type = "l") 
+plot(test$Date, type = "l") 
+```
+
+No visible breaks in data, hence no missing data by date.
+
+```{r Stores + Date, eval = F }
+## Find missing data ##
+
+# Expected rows of records (1115 x 941 days) = 1,049,215  vs Actual = 1,017,209. Missing records = 33,121
+
+# 1. Finding all combinations of stores and dates
+allStoresAndDates <- expand.grid(unique(train.store$Store), unique(train.store$Date))
+# Explanation
+ # - List all permutations of stores (1,115) and dates (971 days) 
+
+
+# 2. Naming the two columns in the newly created dataframe for step 3
+names(allStoresAndDates) <- c("Store", "Date")
+
+
+# 3. Extract stores with missing dates and consequently sales data.
+missingDatesForStores <-  anti_join(allStoresAndDates, train.store, by = c("Store", "Date"))
+# Explanation
+  # - anti_join is a dplyr function that finds unmatched records.
+  # - 1st parameter = "Master table"
+  # - 2nd parameter = Comparison table
+  # - Function checks "train.store" records against "allStoresAndDates" and for 
+  # records that train.store do not have, show it as an output.
+# Actual missing records do not equate to expected missing records as some stores may only be opened after the start date.
+
+
+## Note: Ignoring missing data ##
+# As per competition host, Florian, "The missing data you’re observing for a 6 month period in 2014 was a mistake done by us. For some stores this data was simply not included in the train-set. We’ve discussed this with Kaggle and decided that it’s an insignificant omission as there are still more than enough store/date combinations left to create a model on.""
+
+## Conclusion: Proceed to find other missing data.
+
+```
+
+
 # Exploratory Data Analysis
-## Data Merging
+## Data Merging 
 ```{r Merging , eval = T}
 train.store <- merge(train, store, by = "Store")
 test.store <- merge(test, store, by = "Store")
 
 ```
 
-## 1. Dates (YC)
-Sales data start from `r min(train$Date)` to `r max(train$Date)`, which spans a total of `r max(train$Date) - min(train$Date)` days or 2 years 7 months.
-
-```{r Sales - Date, eval = T }
-plot(train$Date, type = "l") 
-plot(test$Date, type = "l") 
-
-```
-No () visible breaks in data, hence no missing data by date. 
-
-
-## 2. Day of week (YC)
+## 1. Day of week 
 Sunday has the least sales for all opened stores over the data period, and that could be because most stores are closed on Sundays. 
 ```{r Sales - DayofWeek, eval = T }
 # Check if closed stores have any sales. Result = no anomalies.
@@ -171,7 +220,7 @@ train %>% group_by(DayOfWeek, Open) %>% tally() %>%
 
 ```
 
-## 3. PromotionInterval, StoreType, Assortment Analysis (YC)
+## 2. PromotionInterval, StoreType, Assortment Analysis 
 ```{r ProInt + Type + Assortment, eval = T}
 # PromotionInterval
 ggplot(train.store, aes(x = factor(PromoInterval), y = Sales, color = PromoInterval)) +
@@ -198,7 +247,7 @@ ggplot(train.store, aes(x = Date, y = Customers, color = Assortment)) +
     geom_smooth(se= F, size = 1.5) +
     ggtitle("Customers by Assortment")
 ```
-## 4. CompetitionDistance, OpenSinceMonth/Year
+## 3. CompetitionDistance, OpenSinceMonth/Year
 ```{r Competition, eval = T}
 # Combine year and month into one date variable:
 store$CompetitionOpenSince <-as.yearmon(paste(store$CompetitionOpenSinceYear, 
@@ -216,7 +265,7 @@ layout(title = "Distribution of CompetitionOpenedSince",
 ```
 _Observations_: Many competitors opened recently, except 1 that opened in 1900 and 1 in 1961. 
 
-# 5. Promo2, Promo2Since Week/Year
+## 4. Promo2, Promo2Since Week/Year
 ```{r Promo2 + Since Week/Year, eval = T}
 # Combine year and month into one date variable:
 store$Promo2Since <- as.POSIXct(paste(store$Promo2SinceYear, 
@@ -235,7 +284,7 @@ layout(title = "Distribution of Promo2Since",
                       zeroline = FALSE))
 ```
 
-# 6. Competition Distance
+## 5. Competition Distance
 
 ```{r Competiton Distance, eval = T}
 # MeanSales by CompetitionDistance
@@ -274,9 +323,10 @@ train.store2 <- train.store %>% dplyr:: select(
 str(train.store2)
 
 ```
-# Model creation
+
+# Models creation
 ## 1. Using step-wise regression to select best variables 
-```{r Features selection: Stepwise, eval = T }
+```{r Features selection: Stepwise, eval = F }
 
 # Run lm first
 train.mlm <- lm(Sales ~.,  data = train.store2)
@@ -290,13 +340,29 @@ summary(training.swr)
 _Observation_: All variables are significant with stepwise regression. Proceed to classification trees for prediction
 
 ## 2. Using decision trees to predict sales
-```{r Decision Trees, eval = T }
+```{r Decision Trees, eval = F }
 
 # Decision Tree with Rpart function
-train.dt <- rpart(Sales ~ Customers + Open + Promo, data = train.store2, method = "class")
+train.dt <- rpart(Sales ~., data = train.store2, control = rpart.control(cp = 0.0001))
 
-Sys.info()[["machine"]]
-memory.limit()
+# Choosing the best cp (complexity parameter)
+bestcp <- train.dt$cptable[which.min(train.dt$cptable[,"xerror"]),"CP"]
+train.dt.pruned <- prune(train.dt, cp = bestcp)
+
+# Confusion matrix
+conf.matrix <- table(train.dt.pruned$Sales, predict(train.dt.pruned, na.action = na.pass))
+
+rownames(conf.matrix) <- paste("Actual", rownames(conf.matrix), sep = ":")
+colnames(conf.matrix) <- paste("Pred", colnames(conf.matrix), sep = ":")
+print(conf.matrix)
+
+# Use training data to predict and assess performance of  model
+Train.predict <- predict(train.dt.pruned, train.store2, type = "matrix")     
+  
+confusionMatrix(table(Train.predict, train.store2$Sales),positive = "1")
+
+
+
 ```
 
 
