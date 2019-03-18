@@ -16,7 +16,8 @@ pacman::p_load(tidyverse,
                lubridate, 
                plotly,
                kableExtra,
-               Knitr)
+               Knitr,
+               dplyr)
 
 # Create html_df for later stlying
 html_df <- function(x){
@@ -157,14 +158,147 @@ unique(train$DayOfWeek)
 ## Reserved . Skewedness of data
 ```{r, eval = T}
 #group revenues by quarter
-train <- train %>%
-          mutate(quarters = paste0(substr(Date,1,4),quarters(as.Date(Date))))
+
 
 train <- train %>% 
-          group_by(quarters) %>%
-          mutate(revtq = sum(Sales,na.rm = TRUE)) %>%
-          ungroup()
+          group_by(Store,year,week) %>%
+          mutate(sales.wk = sum(Sales,na.rm = TRUE)) %>%
+          ungroup() %>%
+          arrange(Store,year,week)
+
+train.wk <- distinct(train[,c("Store","year","week","sales.wk")])
+
+train.wk <- 
+  train.wk %>%
+  group_by(Store,year) %>%
+  mutate(
+         sales.wk_gr = sales.wk / lag(sales.wk) - 1,   
+         sales.wk_mom = sales.wk / lag(sales.wk, 4) - 1,
+         sales.wk_d = sales.wk - lag(sales.wk)
+         ) %>%
+  ungroup()
+
+sales.wk_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk))
+sales.wk_plot + geom_density()
+
+sales.wk_gr_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_gr))
+sales.wk_gr_plot + geom_density()
+
+sales.wk_mom_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_mom))
+sales.wk_mom_plot + geom_density()
+
+sales.wk_d_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_d))
+sales.wk_d_plot + geom_density()
+
+
+
+train.dy <- 
+  train %>%
+  group_by(Store,Date)
+  mutate(
+         sales.dy_gr = Sales / lag(Sales) - 1,   
+         sales.dy_wow = Sales / lag(Sales, 7) - 1,
+         sales.wk_d = sales.wk - lag(sales.wk)
+         sales.wk_yoy = sales.wk - lag(sales.wk)
+         ) %>%
+  ungroup()
+
+sales.wk_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk))
+sales.wk_plot + geom_density()
+
+sales.wk_gr_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_gr))
+sales.wk_gr_plot + geom_density()
+
+sales.wk_mom_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_mom))
+sales.wk_mom_plot + geom_density()
+
+sales.wk_d_plot <- ggplot(data = train.wk,
+            mapping = aes(x = sales.wk_d))
+sales.wk_d_plot + geom_density()
+
+
+
+
+
+counttotal <- test[,c("Store","Id")]
+counttotal %>%
+  group_by(Store) %>%
+  summarise(count = n_distinct(Id))
+
+train <- train %>%
+          mutate(week = week(as.Date(Date)), year = year(as.Date(Date)))
+
+test <- test %>%
+          mutate(week = week(as.Date(Date)), year = year(as.Date(Date)))
+
+week_day <- c(train$week, train$DayOfWeek)
+week_day <- unique(week_day)
+week_day <- data.frame(id=week_day)
+week_day$week_day <- factor(week_day$id)
+
+
+
+#cleaning of missing data in store.csv
+store <- store %>%
+          mutate(CompetitionOpenSinceMonth=ifelse(is.na(CompetitionOpenSinceMonth),median(CompetitionOpenSinceMonth,na.rm=T), CompetitionOpenSinceMonth),
+                 CompetitionOpenSinceYear=ifelse(is.na(CompetitionOpenSinceYear),median(CompetitionOpenSinceYear,na.rm=T), CompetitionOpenSinceYear),
+                 Promo2SinceYear=ifelse(is.na(Promo2SinceYear),0, Promo2SinceYear),
+                 Promo2SinceWeek=ifelse(is.na(Promo2SinceWeek),0, Promo2SinceWeek))
+
+
+train.df <- merge(train, store, by = "Store")
+#calculate average sales by store-type-assort
+train.df <- train.df %>% 
+            group_by(Store, StoreType, Assortment) %>%
+            mutate(store_avg=mean(Sales, rm.na=T)) %>%
+            ungroup()
+
+#select the first average sales data for each store-type-assort
+train.avg.df <- train.df %>%
+  group_by(Store, StoreType, Assortment) %>%
+  slice(1) %>%
+  select(Store,StoreType,Assortment,store_avg) %>%
+  ungroup()
+
+train.test <- left_join(test, train.avg.df)
+
+#calculate multipliers based on store_avg (and removing NaN and Inf)
+train.df$Daily_mult <- train.df$Sales / train.df$store_avg
+train.df[!is.finite(train.df$Daily_mult),]$Daily_mult <- NA
+
+#calculate mean by daily-store-storetype-assort and distribute to train.test
+train.df <- train.df %>%
+  group_by(Store,StoreType,Assortment,week,DayOfWeek) %>%
+  mutate(naive_mean=mean(Sales, rm.na=T)) %>%
+  ungroup()
+
+train_wm <- train.df %>%
+  group_by(Store,StoreType,Assortment,week,DayOfWeek) %>%
+  slice(1) %>%
+  ungroup() %>%
+  select(Store,StoreType,Assortment,week,DayOfWeek,naive_mean)
+
+train.test <- train.test %>% arrange(Store,StoreType,Assortment,week,DayOfWeek)
+train.test <- left_join(train.test,train_wm)
+
+#all the ids are available in training data
+table(is.na(train.test$naive_mean))
+table(is.na(train$Date))
+
+train.df %>%
+  group_by(DayOfWeek, Store) %>%
+  mutate(sales=mean(Sales)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  ggplot(aes(y=Sales, x=DayOfWeek, color=factor(Store))) +
+  geom_line() + xlab("Day") + ylab("Sales for Store (StoreType,Assortment)") +
+  theme(legend.position = "none")
 ```
-
-
           
