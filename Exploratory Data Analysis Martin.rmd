@@ -232,17 +232,44 @@ counttotal %>%
   group_by(Store) %>%
   summarise(count = n_distinct(Id))
 
+#####################################################################################33 
+# Import train.csv, test.csv and store.csv
+train <- read.csv("train.csv", stringsAsFactors = F)
+test <- read.csv("test.csv", stringsAsFactors = F)
+store <- read.csv("store.csv", stringsAsFactors = F)
+
+
 train <- train %>%
-          mutate(week = week(as.Date(Date)), year = year(as.Date(Date)))
+          mutate(week = week(as.Date(Date)), year = year(as.Date(Date)),
+                 week = case_when(
+                   week == 1 ~ "01",
+                   week == 2 ~ "02",
+                   week == 3 ~ "03",
+                   week == 4 ~ "04",
+                   week == 5 ~ "05",
+                   week == 6 ~ "06",
+                   week == 7 ~ "07",
+                   week == 8 ~ "08",
+                   week == 9 ~ "09",
+                   week == week ~ as.character(week)
+                 ),
+                 week_year = paste0(year, "W", week))
 
 test <- test %>%
-          mutate(week = week(as.Date(Date)), year = year(as.Date(Date)))
-
-week_day <- c(train$week, train$DayOfWeek)
-week_day <- unique(week_day)
-week_day <- data.frame(id=week_day)
-week_day$week_day <- factor(week_day$id)
-
+         mutate(week = week(as.Date(Date)), year = year(as.Date(Date)),
+               week = case_when(
+                 week == 1 ~ "01",
+                 week == 2 ~ "02",
+                 week == 3 ~ "03",
+                 week == 4 ~ "04",
+                 week == 5 ~ "05",
+                 week == 6 ~ "06",
+                 week == 7 ~ "07",
+                 week == 8 ~ "08",
+                 week == 9 ~ "09",
+                 week == week ~ as.character(week)
+               ),
+               week_year = paste0(year, "W", week))
 
 
 #cleaning of missing data in store.csv
@@ -253,19 +280,163 @@ store <- store %>%
                  Promo2SinceWeek=ifelse(is.na(Promo2SinceWeek),0, Promo2SinceWeek))
 
 
-train.df <- merge(train, store, by = "Store")
-#calculate average sales by store-type-assort
-train.df <- train.df %>% 
-            group_by(Store, StoreType, Assortment) %>%
+#calculate average sales by store
+train.df <- train %>% 
+            group_by(week_year, Store) %>%
             mutate(store_avg=mean(Sales, rm.na=T)) %>%
             ungroup()
 
-#select the first average sales data for each store-type-assort
-train.avg.df <- train.df %>%
-  group_by(Store, StoreType, Assortment) %>%
-  slice(1) %>%
-  select(Store,StoreType,Assortment,store_avg) %>%
+#select the first average sales data for each store, week_year
+train.df <- train.df %>%
+  group_by(week_year,Store) %>%
+  dplyr::slice(1) %>%
+  select(week_year,Store,store_avg,week) %>%
   ungroup()
+
+#############################################################
+
+#OHE for PromoInterval
+library(stringr)
+store <- cbind.data.frame(store,str_split_fixed(store$PromoInterval, ",", 12))
+colnames(store)[11:22] <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+store$Jan <- ifelse(grepl("Jan",store$PromoInterval),1,0)
+store$Feb <- ifelse(grepl("Feb",store$PromoInterval),1,0)
+store$Mar <- ifelse(grepl("Mar",store$PromoInterval),1,0)
+store$Apr <- ifelse(grepl("Apr",store$PromoInterval),1,0)
+store$May <- ifelse(grepl("May",store$PromoInterval),1,0)
+store$Jun <- ifelse(grepl("Jun",store$PromoInterval),1,0)
+store$Jul <- ifelse(grepl("Jul",store$PromoInterval),1,0)
+store$Aug <- ifelse(grepl("Aug",store$PromoInterval),1,0)
+store$Sep <- ifelse(grepl("Sep",store$PromoInterval),1,0)
+store$Oct <- ifelse(grepl("Oct",store$PromoInterval),1,0)
+store$Nov <- ifelse(grepl("Nov",store$PromoInterval),1,0)
+store$Dec <- ifelse(grepl("Dec",store$PromoInterval),1,0)
+store <- store[,-23]
+
+train.dy <- 
+  train.df %>%
+  group_by(Store) %>%
+  mutate(
+         sales_gr = store_avg / lag(store_avg) - 1,
+         sales_d = store_avg - lag(store_avg),
+         sales_yoy = store_avg/lag(store_avg,53) -1
+         )
+
+multi_lag <- function(train.dy, lags, var, ext=""){
+  lag_names <- paste0(var,ext,lags)
+  lag_funs <- setNames(paste("dplyr::lag(.,",lags,")"), lag_names)
+  train.dy %>% group_by(Store) %>% mutate_at(vars(var), funs_(lag_funs)) %>% ungroup()
+}
+
+corr_store_avg <- multi_lag(train.dy, 1:53, "store_avg")[,-c(1:7)]
+corr_sales_d <- multi_lag(train.dy, 1:53, "sales_d")[,-c(1:7)]
+corr_sales_gr <- multi_lag(train.dy, 1:53, "sales_gr")[,-c(1:7)]
+
+corr_store_avg[mapply(is.infinite, corr_store_avg)] <- NA  
+corr_sales_d[mapply(is.infinite, corr_sales_d)] <- NA  
+corr_sales_gr[mapply(is.infinite, corr_sales_gr)] <- NA  
+  
+train$norm <- sapply(train$Sales, scale)
+sales.daily_plot <- ggplot(data = train,
+            mapping = aes(x = Sales))
+sales.daily_plot + geom_density()
+
+
+sales.weekly_plot <- ggplot(data = train.dy,
+            mapping = aes(x = store_avg))
+sales.weekly_plot + geom_density()
+
+sales_gr_plot <- ggplot(data = train.dy,
+            mapping = aes(x = sales_gr))
+sales_gr_plot + geom_density()
+
+sales_d_plot <- ggplot(data = train.dy,
+            mapping = aes(x = sales_d))
+sales_d_plot + geom_density()
+
+sales_d_plot <- ggplot(data = train.dy,
+            mapping = aes(x = sales_yoy))
+sales_d_plot + geom_density()
+
+
+
+ggplot(train.dy,aes(as.numeric(week),store_avg)) +
+  geom_bar(stat = "identity")
+
+ggplot(train.dy,aes(as.numeric(week),sales_gr)) +
+  geom_bar(stat = "identity")
+
+ggplot(train.dy,aes(as.numeric(week),sales_d)) +
+  geom_bar(stat = "identity")
+
+ggplot(train.dy,aes(as.numeric(week),sales_yoy)) +
+  geom_bar(stat = "identity")
+
+        
+plot <- train.dy %>%
+  ggplot(aes(y=store_avg, x=sales_d, color=factor(as.numeric(week)))) +
+  labs(title="[Fiscal] Relationship Between Last Quarter Revenue and Revenue", x="Last Quarter Revenue", y="Revenue") +
+  geom_point()+
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+#Make the plot interactive
+ggplotly(plot)  # No need to change this line
+
+cor(corr_store_avg[,unlist(lapply(corr_store_avg, is.numeric))],
+    use="complete.obs")
+
+cor(corr_sales_gr[,unlist(lapply(corr_sales_gr, is.numeric))],
+    use="complete.obs")
+
+cor(corr_sales_d[,unlist(lapply(corr_sales_d, is.numeric))],
+    use="complete.obs")
+
+#plot by mean daily sales, graph doesn't make sense
+train %>%
+  group_by(DayOfWeek, Store) %>%
+  mutate(sales = mean(Sales)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  ggplot(aes(y=sales, x=DayOfWeek, color=factor(Store))) +
+  geom_line() + xlab("Week") + ylab("Daily Sales") +
+  theme(legend.position = "none")
+
+#plot by mean weekly sales, graph shows seasonality
+train %>%
+  group_by(as.numeric(week), Store) %>%
+  mutate(sales = mean(Sales)) %>%
+  slice(1) %>%
+  ungroup() %>%
+  ggplot(aes(y=sales, x=as.numeric(week), color=factor(Store))) +
+  geom_line() + xlab("Week") + ylab("Weekly Sales") +
+  theme(legend.position = "none")
+
+#plot by mean weekly sales, graph shows seasonality
+train.dy %>%
+  group_by(as.numeric(week), Store) %>%
+  ungroup() %>%
+  ggplot(aes(y=store_avg, x=as.numeric(week), color=factor(Store))) +
+  geom_line() + xlab("Week") + ylab("Weekly Sales") +
+  theme(legend.position = "none")
+
+ggplot(train.dy,aes(as.numeric(week),sales_d)) +
+  geom_bar(stat = "identity")
+
+#plot by mean weekly sales, graph shows seasonality
+train.dy %>%
+  group_by(as.numeric(week), Store) %>%
+  ungroup() %>%
+  ggplot(aes(y=sales_d, x=as.numeric(week), color=factor(Store))) +
+  geom_line() + xlab("Week") + ylab("Weekly Sales") +
+  theme(legend.position = "none")
+
+##################################################33
+
+qplot(store_avg -lag(store_avg), data = train.df, bins = 50, main = "Right skewed distribution")
+qplot(sales_d, data = train.dy, bins = 50, main = "Right skewed distribution")
+
+qplot(Sales - lag(Sales), data = train, bins = 50, main = "Right skewed distribution")
 
 train.test <- left_join(test, train.avg.df)
 
@@ -275,17 +446,18 @@ train.df[!is.finite(train.df$Daily_mult),]$Daily_mult <- NA
 
 #calculate mean by daily-store-storetype-assort and distribute to train.test
 train.df <- train.df %>%
-  group_by(Store,StoreType,Assortment,week,DayOfWeek) %>%
+  group_by(Store,StoreType,Assortment,DayOfWeek) %>%
   mutate(naive_mean=mean(Sales, rm.na=T)) %>%
   ungroup()
 
 train_wm <- train.df %>%
-  group_by(Store,StoreType,Assortment,week,DayOfWeek) %>%
+  group_by(Store,StoreType,Assortment,DayOfWeek) %>%
   slice(1) %>%
   ungroup() %>%
-  select(Store,StoreType,Assortment,week,DayOfWeek,naive_mean)
+  select(Store,StoreType,Assortment,DayOfWeek,naive_mean)
 
-train.test <- train.test %>% arrange(Store,StoreType,Assortment,week,DayOfWeek)
+
+train.test <- train.test %>% arrange(Store,StoreType,Assortment,DayOfWeek)
 train.test <- left_join(train.test,train_wm)
 
 #all the ids are available in training data
@@ -300,5 +472,86 @@ train.df %>%
   ggplot(aes(y=Sales, x=DayOfWeek, color=factor(Store))) +
   geom_line() + xlab("Day") + ylab("Sales for Store (StoreType,Assortment)") +
   theme(legend.position = "none")
+
+##regression
+#merge store data with train.df
+#calculate average sales by store
+train.final <- merge(train,train.dy, by=c("Store","week_year"))
+train.final <- merge(train,store, by="Store")
+index.col <- c(3,18)
+
+colSums(is.na(store))
+
+index.col <- c(2,4,14,15,17,26)
+train.final <- train.final[,-index.col]
+results <- store %>% filter(is.na(CompetitionDistance))
+
+#build a unique ID
+#store, week, open, promo, StateHoliday, SchoolHoliday, storetype, Assortment, Promo2, Jan-Dec
+#convert characters to factors
+train.final[sapply(train.final, is.character)] <- lapply(train.final[sapply(train.final, is.character)], 
+                                       as.factor)
+
+ss_id <- c(train.final$Store, as.numeric(train.final$week.x), 
+           train.final$Open, train.final$Promo, 
+           train.final$StateHoliday, train.final$SchoolHoliday,
+           train.final$StoreType, train.final$Assortment,
+           train.final$Promo2, train.final$Jan,
+           train.final$Feb,train.final$Mar,
+           train.final$Apr,train.final$May,
+           train.final$Jun,train.final$Jul,
+           train.final$Aug,train.final$Sep,
+           train.final$Oct,train.final$Nov,
+           train.final$Dec) 
+
+ss_id <- unique(ss_id)
+
+ss_id <- data.frame(id=ss_id)
+ss_id$ss_id <- factor(ss_id$id)
+
+library(lfe)
+mod1 <- felm(sales_d ~ , | data=train.df)
+
+
+# XGBoost Model Setup
+library(xgboost)
+set.seed(786354)
+
+# These params take some work to pin down
+params <- list(max_depth=5,
+               eta=0.2,
+               gamma=10,
+               min_child_weight = 20,
+               objective = "reg:linear")
+
+train.fff<-na.omit(train.final)
+
+xgbCV <- xgb.cv(params=params,
+                data=data.matrix(train.fff),
+                label=train.fff$sales_d,
+                nrounds=100,
+                eval_metric="rmse",
+                nfold=10,
+                stratified=TRUE)
+
+numTrees <- min(which(xgbCV$evaluation_log$test_auc_mean == 
+                      max(xgbCV$evaluation_log$test_auc_mean)))
+
+fit4 <- xgboost(params=params,
+                data = data.matrix(testing.df[, -8]),
+                label = testing.df$RISK,
+                nrounds = numTrees,
+                eval_metric="rmse")
+
+# Display relative importance of variables for prediction
+xgb.train.data = xgb.DMatrix(data.matrix(training.df[, -8]), label = training.df$RISK, missing = NA)
+xgb.test.data = xgb.DMatrix(data.matrix(testing.df[, -8]), label = testing.df$RISK, missing = NA)
+col_names = attr(xgb.train.data, ".Dimnames")[[2]]
+imp = xgb.importance(col_names, fit4)
+print("Model Importance")
+xgb.plot.importance(imp)
+
+colSums(is.na(train.final))
+
 ```
           
