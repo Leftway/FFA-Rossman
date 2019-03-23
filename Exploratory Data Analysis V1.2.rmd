@@ -9,12 +9,17 @@ output: html_document
 # Install & load relevant libraries.
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(tidyverse,     ggplot2,       lubridate,             plotly,
-               kableExtra,    zoo,                   Scale,
+               mice,          kableExtra,    zoo,                   Scale,
                forecast,      rpart,         caret,                 e1071,       
-               mice,          stringr,       xgboost)
+               mice,          devtools,      xgboost)
+
+#install_github("AppliedDataSciencePartners/xgboostExplainer")
+#library(xgboostExplainer)
 
 # Create html_df for later stlying
 html_df <- function(x){ kable(x) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left")}
+
+
 ```
 
 # IMPORT FILES
@@ -177,7 +182,9 @@ store <- store %>%
                  Promo2SinceYear = replace(Promo2SinceYear, Promo2SinceYear<2009, 2009),
                  Promo2SinceYear = replace(Promo2SinceYear, Promo2SinceYear>2015, 2015)
                  )
-
+rm(imputed)
+rm(init)
+rm(predM)
 # Last check for NAs
 store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>%
   row_spec(c(4,5,6,8,9), bold = T, color = "red")
