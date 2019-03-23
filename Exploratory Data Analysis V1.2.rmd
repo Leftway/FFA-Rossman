@@ -12,6 +12,7 @@ pacman::p_load(tidyverse,
                ggplot2,
                lubridate, 
                plotly,
+               mice,
                kableExtra,
                zoo,
                plotly,
@@ -138,7 +139,10 @@ store %>% filter(is.na(CompetitionDistance)) %>% nrow()
 
 ```
 
-#### Store - Impute values for CompetitionOpenSince and Promo2Since
+
+
+#### V1_Store - Impute values for CompetitionOpenSince and Promo2Since
+use median
 ```{r NA impute: CompetitionOpenSince + Promo2Since, eval = T, echo = T}
 # Impute NA with median   
 store <- store %>%
@@ -146,6 +150,51 @@ store <- store %>%
                  CompetitionOpenSinceYear=ifelse(is.na(CompetitionOpenSinceYear),median(CompetitionOpenSinceYear,na.rm=T), CompetitionOpenSinceYear),
                  Promo2SinceYear=ifelse(is.na(Promo2SinceYear),0, Promo2SinceYear),
                  Promo2SinceWeek=ifelse(is.na(Promo2SinceWeek),0, Promo2SinceWeek))
+
+# Last check for NAs
+store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>%
+  row_spec(c(4,5,6,8,9), bold = T, color = "red")
+```
+
+
+#### V2_Store - Impute values for CompetitionOpenSince and Promo2Since
+use MICE package
+```{r NA impute: CompetitionOpenSince + Promo2Since, eval = T, echo = T}
+# Initialize mice algorithm where it use information from other variables in the dataset to predict and impute the missing values
+
+init = mice(store, maxit = 0) 
+meth = init$method
+predM = init$predictorMatrix
+
+# Store ID variable does not have any predictive value, Select the BMI variable to not be included as predictor during imputation
+predM[, c("Store")] = 0
+
+# Specify methods for inputing values
+meth[c("CompetitionOpenSinceMonth")]="norm"
+meth[c("CompetitionOpenSinceYear")]="norm"
+meth[c("Promo2SinceWeek")]="norm"
+meth[c("Promo2SinceYear")]="norm"
+
+# Run multiple imputation
+set.seed(111)
+imputed = mice(store, method=meth, predictorMatrix=predM, m=10)
+
+# Replace store with inputed missing value dataset
+store <- complete(imputed)
+store$CompetitionOpenSinceMonth <- round(store$CompetitionOpenSinceMonth, digits = 0)
+store$CompetitionOpenSinceYear <- round(store$CompetitionOpenSinceYear, digits = 0)
+store$Promo2SinceWeek <- round(store$Promo2SinceWeek, digits = 0)
+store$Promo2SinceYear <- round(store$Promo2SinceYear, digits = 0)
+
+store <- store %>%
+          mutate(CompetitionOpenSinceMonth = replace(CompetitionOpenSinceMonth, CompetitionOpenSinceMonth<1, 1),
+                 CompetitionOpenSinceMonth = replace(CompetitionOpenSinceMonth, CompetitionOpenSinceMonth>12, 12),
+                 CompetitionOpenSinceYear = replace(CompetitionOpenSinceYear, CompetitionOpenSinceYear>2015, 2015),
+                 Promo2SinceWeek = replace(Promo2SinceWeek, Promo2SinceWeek<1, 1),
+                 Promo2SinceWeek = replace(Promo2SinceWeek, Promo2SinceWeek>50, 50),
+                 Promo2SinceYear = replace(Promo2SinceYear, Promo2SinceYear<2009, 2009),
+                 Promo2SinceYear = replace(Promo2SinceYear, Promo2SinceYear>2015, 2015)
+                 )
 
 # Last check for NAs
 store %>% is.na() %>% colSums() %>% data.frame() %>% `colnames<-`("No. of NAs") %>% html_df %>%
