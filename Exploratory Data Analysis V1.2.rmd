@@ -9,8 +9,9 @@ output: html_document
 # Install & load relevant libraries.
 if (!require("pacman")) install.packages("pacman")
 pacman::p_load(tidyverse,     ggplot2,       lubridate,             plotly,
-               mice,          kableExtra,    zoo,                   Scale,
-               forecast,      rpart,         caret,                 e1071,       mice)
+               kableExtra,    zoo,                   Scale,
+               forecast,      rpart,         caret,                 e1071,       
+               mice,          stringr,       xgboost)
 
 # Create html_df for later stlying
 html_df <- function(x){ kable(x) %>% kable_styling(bootstrap_options = "striped", full_width = F, position = "left")}
@@ -79,9 +80,25 @@ store <- store %>% mutate(
   StoreType                 = as.factor(StoreType),
   Assortment                = as.factor(Assortment),
   Promo2                    = as.factor(Promo2),
-  PromoInterval             = as.factor(PromoInterval),
   CompetitionOpenSinceMonth = as.numeric(CompetitionOpenSinceMonth),
   CompetitionOpenSinceYear  = as.numeric(CompetitionOpenSinceYear))
+
+#OHE for PromoInterval
+store <- cbind.data.frame(store,str_split_fixed(store$PromoInterval, ",", 12))
+colnames(store)[11:22] <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
+
+store$Jan <- ifelse(grepl("Jan",store$PromoInterval),1,0)
+store$Feb <- ifelse(grepl("Feb",store$PromoInterval),1,0)
+store$Mar <- ifelse(grepl("Mar",store$PromoInterval),1,0)
+store$Apr <- ifelse(grepl("Apr",store$PromoInterval),1,0)
+store$May <- ifelse(grepl("May",store$PromoInterval),1,0)
+store$Jun <- ifelse(grepl("Jun",store$PromoInterval),1,0)
+store$Jul <- ifelse(grepl("Jul",store$PromoInterval),1,0)
+store$Aug <- ifelse(grepl("Aug",store$PromoInterval),1,0)
+store$Sep <- ifelse(grepl("Sep",store$PromoInterval),1,0)
+store$Oct <- ifelse(grepl("Oct",store$PromoInterval),1,0)
+store$Nov <- ifelse(grepl("Nov",store$PromoInterval),1,0)
+store$Dec <- ifelse(grepl("Dec",store$PromoInterval),1,0)
 
 ```
 
@@ -180,7 +197,7 @@ No visible breaks in data, hence no missing data by date.
 # Expected rows of records (1115 x 941 days) = 1,049,215  vs Actual = 1,017,209. Missing records = 33,121
 
 # 1. Finding all combinations of stores and dates
-allStoresAndDates <- expand.grid(unique(train.store$Store), unique(train.store$Date))
+allStoresAndDates <- expand.grid(unique(train$Store), unique(train$Date))
 # Explanation
  # - List all permutations of stores (1,115) and dates (971 days)
 
@@ -190,7 +207,7 @@ names(allStoresAndDates) <- c("Store", "Date")
 
 
 # 3. Extract stores with missing dates and consequently sales data.
-missingDatesForStores <-  anti_join(allStoresAndDates, train.store, by = c("Store", "Date"))
+missingDatesForStores <-  anti_join(allStoresAndDates, train, by = c("Store", "Date"))
 # Explanation
   # - anti_join is a dplyr function that finds unmatched records.
   # - 1st parameter = "Master table"
@@ -326,6 +343,60 @@ ggplot(salesbydist, aes(x = CompetitionDistance, y = MeanSales)) +
     geom_point() + geom_smooth() + scale_x_log10() + scale_y_log10()
 
 ```
+
+## 6. Skewness of data & seasonality
+
+```{r Competiton Distance, eval = T}
+# Histogram of sales distribution
+qplot(Sales, data = train.store, bins = 50, main = "Right skewed distribution")
+qplot(Sales - lag(Sales), data = train.store, bins = 50, main = "Almost normal distribution")
+
+#Seasonality of Sales distribution
+train %>%
+  group_by(Week, Store) %>%
+  mutate(sales = mean(Sales)) %>%
+  dplyr::slice(1) %>%
+  ungroup() %>%
+  ggplot(aes(y=Sales, x=Week, color=factor(Store))) +
+  geom_line() + xlab("Week") + ylab("Weekly Sales") +
+  theme(legend.position = "none")
+##seasonality can be observed from a weekly sales distribution.
+
+plot <- train.store %>%
+  ggplot(aes(y=Sales, x=Sales-lag(Sales), color=factor(Week))) +
+  labs(title="[Fiscal] Relationship Between Last Quarter Revenue and Revenue", x="Last Quarter Revenue", y="Revenue") +
+  geom_point()+
+  geom_smooth(method=lm, se=FALSE, fullrange=TRUE)
+
+ggplotly(plot)
+
+#autoregression testing
+multi_lag <- function(train, lags, var, ext=""){
+  lag_names <- paste0(var,ext,lags)
+  lag_funs <- setNames(paste("dplyr::lag(.,",lags,")"), lag_names)
+  train %>% group_by(Store) %>% mutate_at(vars(var), funs_(lag_funs)) %>% ungroup()
+}
+
+#Testing for multicolinearities
+corr_daily <- multi_lag(train, 1:31, "Sales")
+corr_daily_d <- multi_lag(train.store, 1:31, "")[,-c(1:7)]
+
+corr_daily[mapply(is.infinite, corr_store_avg)] <- NA  
+corr_daily_d[mapply(is.infinite, corr_sales_d)] <- NA  
+
+
+
+## NOTE: Plotting without mean makes everthing too cluttered. Code below can't see shit. Followed online guide.
+## ggplot(train.store, aes(x = CompetitionDistance, y = Sales)) + geom_point() + geom_smooth()
+
+# salesbydist scatterplot
+
+ggplot(salesbydist, aes(x = CompetitionDistance, y = MeanSales)) +
+    geom_point() + geom_smooth() + scale_x_log10() + scale_y_log10()
+
+```
+
+
 __Observations__:
 Interestingly, stores with competition that are closer have slightly higher sales on average while those with competition that are further have slightly lower sales. Just based on this graph alone, we cannot deduce much, but a possibility is that the stores with close competitors are situated in areas with high footfall such as cities, contributing to slightly higher revenue.
 
@@ -369,5 +440,87 @@ Train.predict <- predict(train.dt.pruned, train.store2, type = "matrix")
 confusionMatrix(table(Train.predict, train.store2$Sales),positive = "1")
 
 
+
+```
+## 2. XGBOOST
+```{r Features selection: Stepwise, eval = F }
+set.seed(112)
+
+# These params take some work to pin down
+params <- list(max_depth=5,
+               eta=0.2,
+               gamma=10,
+               min_child_weight = 20,
+               objective = "reg:linear")
+
+train.fff<-na.omit(train.final)
+
+xgbCV <- xgb.cv(params=params,
+                data=data.matrix(train.fff),
+                label=train.fff$sales_d,
+                nrounds=100,
+                eval_metric="rmse",
+                nfold=10,
+                stratified=TRUE)
+
+numTrees <- min(which(xgbCV$evaluation_log$test_auc_mean == 
+                      max(xgbCV$evaluation_log$test_auc_mean)))
+
+fit4 <- xgboost(params=params,
+                data = data.matrix(testing.df[, -8]),
+                label = testing.df$RISK,
+                nrounds = numTrees,
+                eval_metric="rmse")
+
+# Display relative importance of variables for prediction
+xgb.train.data = xgb.DMatrix(data.matrix(training.df[, -8]), label = training.df$RISK, missing = NA)
+xgb.test.data = xgb.DMatrix(data.matrix(testing.df[, -8]), label = testing.df$RISK, missing = NA)
+col_names = attr(xgb.train.data, ".Dimnames")[[2]]
+imp = xgb.importance(col_names, fit4)
+print("Model Importance")
+xgb.plot.importance(imp)
+
+
+
+
+
+result <- randomForest(train1[,variable.names], 
+                    log(train1$Sales+1),
+                    mtry=5,
+                    ntree=50,
+                    max_depth = 30,
+                    sampsize=150000,
+                    do.trace=TRUE)
+
+importance(result, type = 1) 
+
+importance(result, type = 2)
+
+varImpPlot(result)
+
+pred <- exp(predict(result, test1)) -1
+submission <- data.frame(Id=test$Id, Sales=pred)
+
+```
+## 3. RANDOM FOREST
+```{r Features selection: Stepwise, eval = F }
+set.seed(113)
+
+result <- randomForest(train.store[,variable.names], 
+                    log(train1$Sales+1),
+                    mtry=5,
+                    ntree=50,
+                    max_depth = 30,
+                    sampsize=150000,
+                    do.trace=TRUE)
+
+importance(result, type = 1) 
+
+importance(result, type = 2)
+
+varImpPlot(result)
+
+pred <- exp(predict(result, test1)) -1
+submission <- data.frame(Id=test$Id, Sales=pred)
 
 ```

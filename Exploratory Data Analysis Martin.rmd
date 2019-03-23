@@ -296,7 +296,6 @@ train.df <- train.df %>%
 #############################################################
 
 #OHE for PromoInterval
-library(stringr)
 store <- cbind.data.frame(store,str_split_fixed(store$PromoInterval, ",", 12))
 colnames(store)[11:22] <- c("Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec")
 
@@ -312,7 +311,7 @@ store$Sep <- ifelse(grepl("Sep",store$PromoInterval),1,0)
 store$Oct <- ifelse(grepl("Oct",store$PromoInterval),1,0)
 store$Nov <- ifelse(grepl("Nov",store$PromoInterval),1,0)
 store$Dec <- ifelse(grepl("Dec",store$PromoInterval),1,0)
-store <- store[,-23]
+store <- store[,-10]
 
 train.dy <- 
   train.df %>%
